@@ -66,30 +66,96 @@ public class PlainK3ExecutionEngine extends AbstractDeterministicExecutionEngine
 
 		PlainK3ExecutionEngine.super.initialize(executionContext);
 
-		String className = executionContext.getRunConfiguration().getExecutionEntryPoint();
+	/*
+	 * Get info from the RunConfiguration
+	 */
+		String mainMethod = executionContext.getRunConfiguration().getExecutionEntryPoint();
+		String mainModelElementURI = executionContext.getRunConfiguration().getModelEntryPoint();
+		URI modelURI = executionContext.getRunConfiguration().getExecutedModelURI();
+		
+	/*
+	 * Find the entry point in the workspace
+	 */
+		Resource model = loadModel(modelURI);
+		EObject caller = model.getEObject(mainModelElementURI);
+		
+		String aspectClassName = mainMethod.substring(0, mainMethod.lastIndexOf("."));
+		String methodName = mainMethod.substring(mainMethod.lastIndexOf(".")+1);
+		
 
 		SequentialLanguageDefinition languageDefintion = getLanguageDefinition(executionContext.getLanguageDefinitionExtension().getXDSMLFilePath());
+		Bundle bundle = findBundle(executionContext, languageDefintion, aspectClassName);
+		if (bundle == null)
+			throw new RuntimeException("Could not find bundle " + languageDefintion.getDsaProject().getProjectName());
 		
-		// If nothing is declared in the launch configuration,
-		// we use the value given in the xDSML
-		if (className == null || className.equals("")) {
-			className = languageDefintion.getDsaProject()
-					.getEntryPoint();
+		// search the class
+		Class<?> aspClass = null;
+		try {
+			aspClass = bundle.loadClass(executionContext.getRunConfiguration().getExecutionEntryPoint());
+		} catch (ClassNotFoundException e) {
+			String bundleName = bundle.getHeaders().get("Bundle-Name");
+			e.printStackTrace();
+			throw new RuntimeException("Could not find class "
+					+ executionContext.getRunConfiguration().getExecutionEntryPoint() + " in bundle " + bundleName
+					+ ".");
+		}
+		
+		// search the method
+		final ArrayList<Object> parameters = new ArrayList<>();
+		parameters.add(caller);
+		final Method method;
+		try {
+			method = aspClass.getMethod(mainMethod, parameters.get(0).getClass().getInterfaces()[0]);
+		} catch (Exception e) {
+			String msg = "There is no \"main\" method in "+aspClass.getName() +" with first parameter able to handle "+parameters.get(0).toString(); 
+			msg += " from "+((EObject)parameters.get(0)).eClass().getEPackage().getNsURI();
+			Activator.error(msg, e);
+			throw new RuntimeException("Could not find method main with correct parameters.");
 		}
 
-		
-		
+	/*
+	 * Set the entry point in the engine
+	 */
+		_entryPoint = new Runnable() {
+			@Override
+			public void run() {
+				StepManagerRegistry.getInstance().registerManager(PlainK3ExecutionEngine.this);
+				try {
+					//since aspect's methods are static, first arg is null
+					method.invoke(null, parameters.get(0));
+				}
+				catch (EngineStoppedException stopExeception){
+					// not really an error, simply forward the stop exception
+					throw stopExeception;
+				}
+				catch (java.lang.reflect.InvocationTargetException ite){
+					// not really an error, simply forward the stop exception
+					if(ite.getCause() instanceof  EngineStoppedException){
+						throw (EngineStoppedException)ite.getCause();
+					}
+					else {
+						throw new RuntimeException(ite);
+					}
+				} catch (Exception e) {
+					throw new RuntimeException(e);
+				} finally {
+					StepManagerRegistry.getInstance().unregisterManager(PlainK3ExecutionEngine.this);
+				}
+			}
+		};
+	}
+
+	private Bundle findBundle(final IExecutionContext executionContext,
+			SequentialLanguageDefinition languageDefintion, String aspectClassName) {
 		
 		// first look using JavaWorkspaceScope as this is safer and will look in dependencies
-		IType mainIType = getITypeMainByWorkspaceScope(className);
+		IType mainIType = getITypeMainByWorkspaceScope(aspectClassName);
 		
 		Bundle bundle = null;
 		String bundleName = null;
 		if(mainIType != null){
 			IPackageFragmentRoot packageFragmentRoot = (IPackageFragmentRoot) mainIType.getPackageFragment()
 					.getParent();
-
-			
 
 			bundleName = packageFragmentRoot.getPath().removeLastSegments(1).lastSegment().toString();
 			if(bundleName != null){
@@ -123,70 +189,7 @@ public class PlainK3ExecutionEngine extends AbstractDeterministicExecutionEngine
 			bundle = Platform.getBundle(bundleName);
 		}
 		
-		if (bundle == null)
-			throw new RuntimeException("Could not find bundle " + bundleName);
-		
-		// search the class
-		Class<?> c;
-		
-		try {
-			c = bundle.loadClass(executionContext.getRunConfiguration().getExecutionEntryPoint());
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-			throw new RuntimeException("Could not find class "
-					+ executionContext.getRunConfiguration().getExecutionEntryPoint() + " in bundle " + bundleName
-					+ ".");
-		}
-
-		// search the method
-		final ArrayList<Object> parameters = new ArrayList<>();
-		parameters.add(executionContext.getResourceModel().getContents().get(0));
-		final Method method;
-		try {
-			method = c.getMethod("main", parameters.get(0).getClass().getInterfaces()[0]);
-		} catch (Exception e) {
-			String msg = "There is no \"main\" method in "+c.getName() +" with first parameter able to handle "+parameters.get(0).toString(); 
-			msg += " from "+((EObject)parameters.get(0)).eClass().getEPackage().getNsURI();
-			Activator.error(msg, e);
-			//((EObject)parameters.get(0)).eClass().getEPackage().getNsURI()
-			throw new RuntimeException("Could not find method main with correct parameters.");
-
-		}
-		final Object caller;
-		try {
-			caller = c.newInstance();
-		} catch (Exception e) {
-			e.printStackTrace();
-			throw new RuntimeException("Could not instanciate class "
-					+ executionContext.getRunConfiguration().getExecutionEntryPoint() + ".");
-		}
-
-		_entryPoint = new Runnable() {
-			@Override
-			public void run() {
-				StepManagerRegistry.getInstance().registerManager(PlainK3ExecutionEngine.this);
-				try {
-					method.invoke(caller, parameters.get(0));
-				}
-				catch (EngineStoppedException stopExeception){
-					// not really an error, simply forward the stop exception
-					throw stopExeception;
-				}
-				catch (java.lang.reflect.InvocationTargetException ite){
-					// not really an error, simply forward the stop exception
-					if(ite.getCause() instanceof  EngineStoppedException){
-						throw (EngineStoppedException)ite.getCause();
-					}
-					else {
-						throw new RuntimeException(ite);
-					}
-				} catch (Exception e) {
-					throw new RuntimeException(e);
-				} finally {
-					StepManagerRegistry.getInstance().unregisterManager(PlainK3ExecutionEngine.this);
-				}
-			}
-		};
+		return bundle;
 	}
 	
 	/**
@@ -273,7 +276,7 @@ public class PlainK3ExecutionEngine extends AbstractDeterministicExecutionEngine
 			return null;
 	}
 	
-	protected SequentialLanguageDefinition getLanguageDefinition(String xDSMLFilePath) {
+	public static SequentialLanguageDefinition getLanguageDefinition(String xDSMLFilePath) {
 	
 
 		// Loading languagedef model
@@ -302,5 +305,18 @@ public class PlainK3ExecutionEngine extends AbstractDeterministicExecutionEngine
 	@Override
 	public String engineKindName() {
 		return "GEMOC Sequential Engine";
+	}
+	
+	private Resource loadModel(URI modelURI) {
+		Resource resource = null;
+		ResourceSet resourceSet;
+		resourceSet = new ResourceSetImpl();
+		resource = resourceSet.createResource(modelURI);		
+		try {
+			resource.load(null);
+		} catch (IOException e) {
+			//chut
+		}
+		return resource;
 	}
 }

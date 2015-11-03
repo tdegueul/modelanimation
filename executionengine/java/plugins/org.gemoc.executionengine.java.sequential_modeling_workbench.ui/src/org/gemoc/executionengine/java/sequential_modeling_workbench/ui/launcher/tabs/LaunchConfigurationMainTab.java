@@ -1,7 +1,14 @@
 package org.gemoc.executionengine.java.sequential_modeling_workbench.ui.launcher.tabs;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
 
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
@@ -19,16 +26,19 @@ import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.search.IJavaSearchScope;
 import org.eclipse.jdt.core.search.SearchEngine;
+import org.eclipse.jdt.internal.core.JavaProject;
 import org.eclipse.jdt.internal.ui.util.BusyIndicatorRunnableContext;
 import org.eclipse.jdt.ui.IJavaElementSearchConstants;
 import org.eclipse.jdt.ui.JavaUI;
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.operation.IRunnableContext;
+import org.eclipse.jface.wizard.WizardDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -44,9 +54,15 @@ import org.gemoc.commons.eclipse.ui.dialogs.SelectAnyIFileDialog;
 import org.gemoc.execution.engine.ui.commons.RunConfiguration;
 import org.gemoc.executionengine.java.api.extensions.languages.SequentialLanguageDefinitionExtension;
 import org.gemoc.executionengine.java.api.extensions.languages.SequentialLanguageDefinitionExtensionPoint;
+import org.gemoc.executionengine.java.engine.PlainK3ExecutionEngine;
 import org.gemoc.executionengine.java.sequential_modeling_workbench.ui.Activator;
 import org.gemoc.executionengine.java.sequential_xdsml.SequentialLanguageDefinition;
 import org.gemoc.executionframework.ui.dialogs.SelectAIRDIFileDialog;
+import org.gemoc.executionframework.ui.dialogs.SelectAnyConcreteEClassDialog;
+import org.gemoc.executionframework.ui.dialogs.SelectAnyEObjectDialog;
+import org.gemoc.executionframework.ui.utils.ENamedElementQualifiedNameLabelProvider;
+import org.gemoc.gemoc_language_workbench.extensions.sirius.modelloader.DefaultModelLoader;
+import org.osgi.framework.Bundle;
 
 import fr.obeo.dsl.debug.ide.launch.AbstractDSLLaunchConfigurationDelegate;
 import fr.obeo.dsl.debug.ide.sirius.ui.launch.AbstractDSLLaunchConfigurationDelegateUI;
@@ -64,11 +80,27 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 	protected Button _animationFirstBreak;
 
 	protected Group _k3Area;
-	protected Text _entryPointText;
+	protected Text _entryPointModelElementText;
+	protected Text _entryPointMethodText;
 
 	protected Text modelofexecutionglml_LocationText;
 
 	public int GRID_DEFAULT_WIDTH = 200;
+	
+	/**
+	 * Loaded model from _modelLocationText
+	 */
+	private Resource model;
+	
+	/**
+	 * Model's root element for execution 
+	 */
+	private EObject mainModelElement;
+	
+	/**
+	 * First method called when starting execution
+	 */
+	private Method mainMethod;
 
 	@Override
 	public void createControl(Composite parent) {
@@ -99,7 +131,8 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		configuration.setAttribute(RunConfiguration.LAUNCH_DELAY, 1000);
 		configuration.setAttribute(RunConfiguration.LAUNCH_SELECTED_DECIDER,
 				RunConfiguration.DECIDER_ASKUSER_STEP_BY_STEP);
-		configuration.setAttribute(RunConfiguration.LAUNCH_ENTRY_POINT, "");
+		configuration.setAttribute(RunConfiguration.LAUNCH_MODEL_ENTRY_POINT, "");
+		configuration.setAttribute(RunConfiguration.LAUNCH_METHOD_ENTRY_POINT, "");
 	}
 
 	@Override
@@ -124,7 +157,9 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 			_melangeQueryText.setText(runConfiguration.getMelangeQuery());
 			_animationFirstBreak.setSelection(runConfiguration.getBreakStart());
 
-			_entryPointText.setText(runConfiguration.getExecutionEntryPoint());
+			//TODO: find aspect target
+			//_entryPointModelElementText.setText(targetURI);
+			_entryPointMethodText.setText(runConfiguration.getExecutionEntryPoint());
 
 		} catch (CoreException e) {
 			Activator.error(e.getMessage(), e);
@@ -145,8 +180,10 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 				this._languageCombo.getText());
 		configuration.setAttribute(RunConfiguration.LAUNCH_MELANGE_QUERY,
 				this._melangeQueryText.getText());
-		configuration.setAttribute(RunConfiguration.LAUNCH_ENTRY_POINT,
-				_entryPointText.getText());
+		configuration.setAttribute(RunConfiguration.LAUNCH_MODEL_ENTRY_POINT,
+				_entryPointModelElementText.getText());
+		configuration.setAttribute(RunConfiguration.LAUNCH_METHOD_ENTRY_POINT,
+				_entryPointMethodText.getText());
 		configuration.setAttribute(RunConfiguration.LAUNCH_BREAK_START,
 				_animationFirstBreak.getSelection());
 	}
@@ -196,7 +233,23 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 							.getFullPath().toPortableString();
 					_modelLocationText.setText(modelPath);
 					updateLaunchConfigurationDialog();
+					
+					model = loadModel(_modelLocationText.getText());
 				}
+			}
+
+			private Resource loadModel(String modelLocation) {
+				URI modelURI = URI.createPlatformResourceURI(modelLocation, true);
+				Resource resource = null;
+				ResourceSet resourceSet;
+				resourceSet = new ResourceSetImpl();
+				resource = resourceSet.createResource(modelURI);		
+				try {
+					resource.load(null);
+				} catch (IOException e) {
+					//chut
+				}
+				return resource;
 			}
 		});
 		return parent;
@@ -331,35 +384,48 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 	}
 
 	private Composite createK3Layout(Composite parent, Font font) {
-		createTextLabelLayout(parent, "Entry point");
-
-		_entryPointText = new Text(parent, SWT.SINGLE | SWT.BORDER);
-		_entryPointText.setLayoutData(createStandardLayout());
-		_entryPointText.setFont(font);
-		_entryPointText.setEditable(false);
-		/* _entryPointText.addModifyListener(fBasicModifyListener);
-		Button javaMethodBrowseButton = createPushButton(parent, "Browse", null);
-		javaMethodBrowseButton.addSelectionListener(new SelectionAdapter() {
+		createTextLabelLayout(parent, "Main model element");
+		_entryPointModelElementText = new Text(parent, SWT.SINGLE | SWT.BORDER);
+		_entryPointModelElementText.setLayoutData(createStandardLayout());
+		_entryPointModelElementText.setFont(font);
+		_entryPointModelElementText.setEditable(false);
+		Button mainModelElemBrowseButton = createPushButton(parent, "Browse", null);
+		mainModelElemBrowseButton.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
-				IJavaSearchScope searchScope = SearchEngine
-						.createWorkspaceScope();
-				IRunnableContext c = new BusyIndicatorRunnableContext();
-				SelectionDialog dialog;
-				try {
-					dialog = JavaUI.createTypeDialog(_parent.getShell(), c,
-							searchScope,
-							IJavaElementSearchConstants.CONSIDER_CLASSES, false);
-					dialog.open();
-					if (dialog.getReturnCode() == Dialog.OK) {
-						IType type = (IType) dialog.getResult()[0];
-						_entryPointText.setText(type.getFullyQualifiedName());
-					}
-				} catch (JavaModelException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
+				SelectAnyEObjectDialog dialog = new SelectAnyConcreteEClassDialog(model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
+				int res = dialog.open();
+				if (res == WizardDialog.OK) {
+					EObject selection = (EObject) dialog.getFirstResult();
+					_entryPointModelElementText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
 				}
 			}
-		});*/
+		});
+		
+		//Collect aspects
+		String xdsmlPath = SequentialLanguageDefinitionExtensionPoint.findDefinition(_languageCombo.getText()).getXDSMLFilePath();
+		SequentialLanguageDefinition xdsml = PlainK3ExecutionEngine.getLanguageDefinition(xdsmlPath);
+		String dsaProjectName = xdsml.getDsaProject().getProjectName();
+		//TODO: take care of refresh for _entryPointModelElementText
+		List<Class> candidateAspects = getAspectsFor(_entryPointModelElementText.getText(),dsaProjectName); 
+		
+		createTextLabelLayout(parent, "Main method");
+		_entryPointMethodText = new Text(parent, SWT.SINGLE | SWT.BORDER);
+		_entryPointMethodText.setLayoutData(createStandardLayout());
+		_entryPointMethodText.setFont(font);
+		_entryPointMethodText.setEditable(false);
+		Button mainMethodBrowseButton = createPushButton(parent, "Browse", null);
+		//TODO: filter @main & select method
+//		mainMethodBrowseButton.addSelectionListener(new SelectionAdapter() {
+//			public void widgetSelected(SelectionEvent e) {
+//				SelectAnyEObjectDialog dialog = new SelectAnyConcreteEClassDialog(model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
+//				int res = dialog.open();
+//				if (res == WizardDialog.OK) {
+//					EObject selection = (EObject) dialog.getFirstResult();
+//					_entryPointMethodText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
+//				}
+//			}
+//		});
+		
 		return parent;
 	}
 
@@ -367,23 +433,6 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 	protected void updateLaunchConfigurationDialog() {
 		super.updateLaunchConfigurationDialog();		
 		_k3Area.setVisible(true);
-		// entrypoint must come from the xdsml, maybe later we would allows an "expert mode" where we will allow to change it there
-		SequentialLanguageDefinitionExtension languageDefinitionExtPoint = SequentialLanguageDefinitionExtensionPoint
-				.findDefinition(_languageCombo.getText());
-		if(languageDefinitionExtPoint != null ){
-			SequentialLanguageDefinition langDef =getLanguageDefinition(languageDefinitionExtPoint.getXDSMLFilePath());
-			if(langDef != null && langDef.getDsaProject()!=null){
-				_entryPointText.setText(getLanguageDefinition(languageDefinitionExtPoint.getXDSMLFilePath()).getDsaProject().getEntryPoint());
-			}
-			else {
-				_entryPointText.setText("");
-			}
-		}
-		else {
-			_entryPointText.setText("");
-		}
-		
-
 	}
 	
 	// should have some cahce mecanism in order to avoid multiple load
@@ -411,5 +460,49 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 			}
 		}
 		return null;
+	}
+	
+	private Properties loadProperties(String bundleSymbolicName) {
+		Bundle bundle = Platform.getBundle(bundleSymbolicName);	
+		Properties properties = new Properties();
+		String searchedPropertyFileName = "/META-INF/xtend-gen/" + bundleSymbolicName + ".k3_aspect_mapping.properties";
+		InputStream inputStream = null;
+		try {
+			inputStream = bundle.getEntry(searchedPropertyFileName).openStream();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		if (inputStream != null) {
+			try{
+				properties.load(inputStream);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}	
+		return properties;
+	}
+	
+	private List<Class> getAspectsFor(String eclass, String dsaProjectName){
+		List<Class> res = new ArrayList<>();
+		
+		Bundle bundle = Platform.getBundle(dsaProjectName);
+		
+		Properties properties = loadProperties(dsaProjectName);
+		for(String key : properties.stringPropertyNames()){
+			if(key.endsWith("."+eclass)){
+				String value = properties.getProperty(key);
+				String[] values = value.replaceAll(" ", "").split(",");
+				for(String val : values){
+					try {
+						Class asp = bundle.loadClass(val);
+						res.add(asp);
+					} catch (ClassNotFoundException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+		
+		return res;
 	}
 }

@@ -25,6 +25,8 @@ public interface IRunConfiguration {
 
 	String getDeciderName();
 		
+	String getModelEntryPoint();
+	
 	String getExecutionEntryPoint();
 	
 }

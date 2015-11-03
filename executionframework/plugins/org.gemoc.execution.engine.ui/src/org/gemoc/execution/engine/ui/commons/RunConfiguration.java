@@ -22,7 +22,8 @@ public class RunConfiguration implements IRunConfiguration {
 	public static final String LAUNCH_SELECTED_LANGUAGE = "GEMOC_LAUNCH_SELECTED_LANGUAGE";
 	public static final String LAUNCH_MELANGE_QUERY = "GEMOC_LAUNCH_MELANGE_QUERY";
 	public static final String LAUNCH_SELECTED_DECIDER = "GEMOC_LAUNCH_SELECTED_DECIDER";
-	public static final String LAUNCH_ENTRY_POINT = "GEMOC_LAUNCH_ENTRY_POINT";
+	public static final String LAUNCH_MODEL_ENTRY_POINT = "LAUNCH_MODEL_ENTRY_POINT";
+	public static final String LAUNCH_METHOD_ENTRY_POINT = "LAUNCH_METHOD_ENTRY_POINT";
 	public static final String LAUNCH_BREAK_START = "GEMOC_LAUNCH_BREAK_START";
 
 	// parameters that should be derived from the language in future version
@@ -49,7 +50,8 @@ public class RunConfiguration implements IRunConfiguration {
 		}
 		_deciderName = getAttribute(LAUNCH_SELECTED_DECIDER, "");
 		_deadlockDetectionDepth = getAttribute(LAUNCH_DEADLOCK_DETECTION_DEPTH, 10);
-		_entryPoint = getAttribute(LAUNCH_ENTRY_POINT, "");
+		_methodEntryPoint = getAttribute(LAUNCH_METHOD_ENTRY_POINT, "");
+		_modelEntryPoint = getAttribute(LAUNCH_MODEL_ENTRY_POINT, "");
 
 		for (EngineAddonSpecificationExtension extension : EngineAddonSpecificationExtensionPoint.getSpecifications()) {
 			_engineAddonExtensions.put(extension, getAttribute(extension.getName(), false));
@@ -137,17 +139,24 @@ public class RunConfiguration implements IRunConfiguration {
 		return result;
 	}
 
-	private String _entryPoint;
+	private String _methodEntryPoint;
+	private String _modelEntryPoint;
 
 	@Override
 	public String getExecutionEntryPoint() {
-		return _entryPoint;
+		return _methodEntryPoint;
 	}
 
+	@Override
+	public String getModelEntryPoint() {
+		return _modelEntryPoint;
+	}
+	
 	private boolean _breakStart;
 
 	public boolean getBreakStart() {
 		return _breakStart;
 	}
+
 
 }
