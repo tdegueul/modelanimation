@@ -4,11 +4,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Set;
 
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
@@ -60,6 +62,7 @@ import org.gemoc.executionengine.java.sequential_xdsml.SequentialLanguageDefinit
 import org.gemoc.executionframework.ui.dialogs.SelectAIRDIFileDialog;
 import org.gemoc.executionframework.ui.dialogs.SelectAnyConcreteEClassDialog;
 import org.gemoc.executionframework.ui.dialogs.SelectAnyEObjectDialog;
+import org.gemoc.executionframework.ui.dialogs.SelectMainMethodDialog;
 import org.gemoc.executionframework.ui.utils.ENamedElementQualifiedNameLabelProvider;
 import org.gemoc.gemoc_language_workbench.extensions.sirius.modelloader.DefaultModelLoader;
 import org.osgi.framework.Bundle;
@@ -392,21 +395,19 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		Button mainModelElemBrowseButton = createPushButton(parent, "Browse", null);
 		mainModelElemBrowseButton.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
-				SelectAnyEObjectDialog dialog = new SelectAnyConcreteEClassDialog(model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
-				int res = dialog.open();
-				if (res == WizardDialog.OK) {
-					EObject selection = (EObject) dialog.getFirstResult();
-					_entryPointModelElementText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
+				if(model != null){
+					SelectAnyEObjectDialog dialog = new SelectAnyConcreteEClassDialog(model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
+					int res = dialog.open();
+					if (res == WizardDialog.OK) {
+						EObject selection = (EObject) dialog.getFirstResult();
+						_entryPointModelElementText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
+					}
 				}
 			}
 		});
 		
 		//Collect aspects
-		String xdsmlPath = SequentialLanguageDefinitionExtensionPoint.findDefinition(_languageCombo.getText()).getXDSMLFilePath();
-		SequentialLanguageDefinition xdsml = PlainK3ExecutionEngine.getLanguageDefinition(xdsmlPath);
-		String dsaProjectName = xdsml.getDsaProject().getProjectName();
-		//TODO: take care of refresh for _entryPointModelElementText
-		List<Class> candidateAspects = getAspectsFor(_entryPointModelElementText.getText(),dsaProjectName); 
+		Set<Class> candidateAspects = getAllAspects(); 
 		
 		createTextLabelLayout(parent, "Main method");
 		_entryPointMethodText = new Text(parent, SWT.SINGLE | SWT.BORDER);
@@ -414,17 +415,17 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		_entryPointMethodText.setFont(font);
 		_entryPointMethodText.setEditable(false);
 		Button mainMethodBrowseButton = createPushButton(parent, "Browse", null);
-		//TODO: filter @main & select method
-//		mainMethodBrowseButton.addSelectionListener(new SelectionAdapter() {
-//			public void widgetSelected(SelectionEvent e) {
-//				SelectAnyEObjectDialog dialog = new SelectAnyConcreteEClassDialog(model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
-//				int res = dialog.open();
-//				if (res == WizardDialog.OK) {
-//					EObject selection = (EObject) dialog.getFirstResult();
-//					_entryPointMethodText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
-//				}
-//			}
-//		});
+		mainMethodBrowseButton.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				EObject modelElem = getModelElem();
+				SelectMainMethodDialog dialog = new SelectMainMethodDialog(candidateAspects, modelElem, new ENamedElementQualifiedNameLabelProvider());
+				int res = dialog.open();
+				if (res == WizardDialog.OK) {
+					EObject selection = (EObject) dialog.getFirstResult();
+					_entryPointMethodText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
+				}
+			}
+		});
 		
 		return parent;
 	}
@@ -482,14 +483,22 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		return properties;
 	}
 	
-	private List<Class> getAspectsFor(String eclass, String dsaProjectName){
-		List<Class> res = new ArrayList<>();
-		
-		Bundle bundle = Platform.getBundle(dsaProjectName);
-		
-		Properties properties = loadProperties(dsaProjectName);
-		for(String key : properties.stringPropertyNames()){
-			if(key.endsWith("."+eclass)){
+	/**
+	 * Get aspects from DSA project.
+	 */
+	private Set<Class> getAllAspects(){
+		Set<Class> res = new HashSet<Class>();
+
+		try {
+			String xdsmlPath = SequentialLanguageDefinitionExtensionPoint.findDefinition(_languageCombo.getText()).getXDSMLFilePath();
+			SequentialLanguageDefinition xdsml = PlainK3ExecutionEngine.getLanguageDefinition(xdsmlPath);
+			String dsaProjectName = xdsml.getDsaProject().getProjectName();
+			
+			
+			Bundle bundle = Platform.getBundle(dsaProjectName);
+			
+			Properties properties = loadProperties(dsaProjectName);
+			for(String key : properties.stringPropertyNames()){
 				String value = properties.getProperty(key);
 				String[] values = value.replaceAll(" ", "").split(",");
 				for(String val : values){
@@ -501,8 +510,21 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 					}
 				}
 			}
+		} catch (Exception e) {
+			// chut
 		}
 		
 		return res;
+	}
+	
+	private EObject getModelElem(){
+		try{
+			EObject caller = model.getEObject(_entryPointModelElementText.getText());
+			return caller;
+		}
+		catch(Exception e){
+			//chut
+		}
+		return null;
 	}
 }

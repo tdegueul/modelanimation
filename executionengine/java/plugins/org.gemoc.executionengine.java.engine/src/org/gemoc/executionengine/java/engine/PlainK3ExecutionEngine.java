@@ -307,7 +307,7 @@ public class PlainK3ExecutionEngine extends AbstractDeterministicExecutionEngine
 		return "GEMOC Sequential Engine";
 	}
 	
-	private Resource loadModel(URI modelURI) {
+	public static Resource loadModel(URI modelURI) {
 		Resource resource = null;
 		ResourceSet resourceSet;
 		resourceSet = new ResourceSetImpl();

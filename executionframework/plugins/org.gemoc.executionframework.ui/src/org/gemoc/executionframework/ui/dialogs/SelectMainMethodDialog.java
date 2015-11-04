@@ -6,15 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import org.eclipse.emf.ecore.EClass;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.jface.viewers.ILabelProvider;
-import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 
 import fr.inria.diverse.k3.al.annotationprocessor.Aspect;
-import fr.inria.diverse.k3.al.annotationprocessor.Main;
 
 
 public class SelectMainMethodDialog extends ElementListSelectionDialog  {
@@ -24,7 +21,9 @@ public class SelectMainMethodDialog extends ElementListSelectionDialog  {
 	public SelectMainMethodDialog(Set<Class> aspects, EObject modelElem, ILabelProvider renderer) {
 		super(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(), renderer);
 		_aspects = aspects;
-		update(modelElem);
+		
+		if(modelElem != null && aspects != null)
+			update(modelElem);
 	}
 
 	/**
@@ -64,8 +63,12 @@ public class SelectMainMethodDialog extends ElementListSelectionDialog  {
 	private Class getTarget(Class aspect){
 		
 		Annotation annotation = aspect.getAnnotation(fr.inria.diverse.k3.al.annotationprocessor.Aspect.class);
-		Aspect k3tag = (Aspect) annotation;
-		return k3tag.className();
+		if(annotation != null){
+				Aspect k3tag = (Aspect) annotation;
+				return k3tag.className();
+		}
+		
+		return null;
 	}
 
 }
