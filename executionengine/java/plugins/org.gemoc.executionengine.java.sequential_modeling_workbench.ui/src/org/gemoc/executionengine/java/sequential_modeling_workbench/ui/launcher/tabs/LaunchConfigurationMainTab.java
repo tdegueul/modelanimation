@@ -91,21 +91,6 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 
 	public int GRID_DEFAULT_WIDTH = 200;
 	
-	/**
-	 * Loaded model from _modelLocationText
-	 */
-	private Resource model;
-	
-	/**
-	 * Model's root element for execution 
-	 */
-	private EObject mainModelElement;
-	
-	/**
-	 * First method called when starting execution
-	 */
-	private Method mainMethod;
-
 	@Override
 	public void createControl(Composite parent) {
 		_parent = parent;
@@ -162,7 +147,7 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 			_animationFirstBreak.setSelection(runConfiguration.getBreakStart());
 
 			//TODO: find aspect target
-			//_entryPointModelElementText.setText(targetURI);
+			_entryPointModelElementText.setText(runConfiguration.getModelEntryPoint());
 			_entryPointMethodText.setText(runConfiguration.getExecutionEntryPoint());
 
 		} catch (CoreException e) {
@@ -237,23 +222,7 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 							.getFullPath().toPortableString();
 					_modelLocationText.setText(modelPath);
 					updateLaunchConfigurationDialog();
-					
-					model = loadModel(_modelLocationText.getText());
 				}
-			}
-
-			private Resource loadModel(String modelLocation) {
-				URI modelURI = URI.createPlatformResourceURI(modelLocation, true);
-				Resource resource = null;
-				ResourceSet resourceSet;
-				resourceSet = new ResourceSetImpl();
-				resource = resourceSet.createResource(modelURI);		
-				try {
-					resource.load(null);
-				} catch (IOException e) {
-					//chut
-				}
-				return resource;
 			}
 		});
 		return parent;
@@ -393,9 +362,11 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		_entryPointModelElementText.setLayoutData(createStandardLayout());
 		_entryPointModelElementText.setFont(font);
 		_entryPointModelElementText.setEditable(false);
+		_entryPointModelElementText.addModifyListener(fBasicModifyListener);
 		Button mainModelElemBrowseButton = createPushButton(parent, "Browse", null);
 		mainModelElemBrowseButton.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
+				Resource model = getModel();
 				if(model != null){
 					SelectAnyEObjectDialog dialog = new SelectAnyEObjectDialog(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(),model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
 					int res = dialog.open();
@@ -413,6 +384,7 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		_entryPointMethodText.setLayoutData(createStandardLayout());
 		_entryPointMethodText.setFont(font);
 		_entryPointMethodText.setEditable(false);
+		_entryPointMethodText.addModifyListener(fBasicModifyListener);
 		Button mainMethodBrowseButton = createPushButton(parent, "Browse", null);
 		mainMethodBrowseButton.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
@@ -421,8 +393,8 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 				SelectMainMethodDialog dialog = new SelectMainMethodDialog(candidateAspects, modelElem, new ENamedElementQualifiedNameLabelProvider());
 				int res = dialog.open();
 				if (res == WizardDialog.OK) {
-					EObject selection = (EObject) dialog.getFirstResult();
-					_entryPointMethodText.setText(EcoreUtil.getURI(selection).toString());
+					Method selection = (Method) dialog.getFirstResult();
+					_entryPointMethodText.setText(selection.toString());
 				}
 			}
 		});
@@ -517,9 +489,14 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		return res;
 	}
 	
+	private Resource getModel(){
+		URI modelURI = URI.createPlatformResourceURI(_modelLocationText.getText(), true);
+		return PlainK3ExecutionEngine.loadModel(modelURI);
+	}
+	
 	private EObject getModelElem(){
 		try{
-			EObject caller = model.getEObject(_entryPointModelElementText.getText());
+			EObject caller = getModel().getEObject(_entryPointModelElementText.getText());
 			return caller;
 		}
 		catch(Exception e){

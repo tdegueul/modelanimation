@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import org.eclipse.emf.ecore.EClass;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.jface.viewers.ILabelProvider;
 import org.eclipse.ui.PlatformUI;
@@ -30,7 +31,7 @@ public class SelectMainMethodDialog extends ElementListSelectionDialog  {
 	 * Display only methods with @main from Aspects applied on modelElem
 	 */
 	public void update(EObject modelElem){
-		Class target = modelElem.eClass().getClass();
+		Class target = modelElem.eClass().getInstanceClass();
 		List<Method> selection = new ArrayList<Method>();
 		
 		for (Class asp : _aspects)
@@ -61,7 +62,6 @@ public class SelectMainMethodDialog extends ElementListSelectionDialog  {
 	 * Return the targeted class from the @Aspect
 	 */
 	private Class getTarget(Class aspect){
-		
 		Annotation annotation = aspect.getAnnotation(fr.inria.diverse.k3.al.annotationprocessor.Aspect.class);
 		if(annotation != null){
 				Aspect k3tag = (Aspect) annotation;
