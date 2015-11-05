@@ -50,6 +50,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.dialogs.SelectionDialog;
 import org.gemoc.commons.eclipse.emf.URIHelper;
 import org.gemoc.commons.eclipse.ui.dialogs.SelectAnyIFileDialog;
@@ -396,11 +397,12 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		mainModelElemBrowseButton.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				if(model != null){
-					SelectAnyEObjectDialog dialog = new SelectAnyConcreteEClassDialog(model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
+					SelectAnyEObjectDialog dialog = new SelectAnyEObjectDialog(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(),model.getResourceSet(), new ENamedElementQualifiedNameLabelProvider());
 					int res = dialog.open();
 					if (res == WizardDialog.OK) {
 						EObject selection = (EObject) dialog.getFirstResult();
-						_entryPointModelElementText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
+						String uriFragment = selection.eResource().getURIFragment(selection);
+						_entryPointModelElementText.setText(uriFragment);
 					}
 				}
 			}
@@ -420,7 +422,7 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 				int res = dialog.open();
 				if (res == WizardDialog.OK) {
 					EObject selection = (EObject) dialog.getFirstResult();
-					_entryPointMethodText.setText(EcoreUtil.getURI(selection).toPlatformString(true));
+					_entryPointMethodText.setText(EcoreUtil.getURI(selection).toString());
 				}
 			}
 		});
