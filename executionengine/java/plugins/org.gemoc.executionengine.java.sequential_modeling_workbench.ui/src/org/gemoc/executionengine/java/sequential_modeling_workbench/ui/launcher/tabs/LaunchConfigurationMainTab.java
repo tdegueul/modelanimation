@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -86,6 +87,9 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 	protected Group _k3Area;
 	protected Text _entryPointModelElementText;
 	protected Text _entryPointMethodText;
+	
+	protected Combo _melangeCombo;
+	protected Combo _modelTypeCombo;
 
 	protected Text modelofexecutionglml_LocationText;
 
@@ -330,29 +334,43 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		});
 		createTextLabelLayout(parent, "ex: ?mm=http://yourmetamodelextended");
 
-		/*
-		 * languageCombo.addListener (SWT.DefaultSelection, new Listener () {
-		 * public void handleEvent (Event e) { //System.out.println (e.widget +
-		 * " - Default Selection");
-		 * 
-		 * updateLaunchConfigurationDialog(); } });
-		 */
+		
+		//Language
+		createTextLabelLayout(parent, "Melange languages");
+		_melangeCombo = new Combo(parent, SWT.NONE);
+		_melangeCombo.setLayoutData(createStandardLayout());
+		
+		ArrayList<String> languagesNames = new ArrayList<String>();
+		IConfigurationElement[] melangeLanguages = Platform.getExtensionRegistry().getConfigurationElementsFor("fr.inria.diverse.melange.language");
+		for (IConfigurationElement lang : melangeLanguages) {
+			languagesNames.add(lang.getAttribute("id"));
+		}
+		_melangeCombo.setItems(languagesNames.toArray(empty));
+		_melangeCombo.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				String selection =_melangeCombo.getText();
+				IConfigurationElement[] melangeLanguages = Platform.getExtensionRegistry().getConfigurationElementsFor("fr.inria.diverse.melange.language");
+				List<String> modelTypeNames = new ArrayList<String>();
+				for (IConfigurationElement lang : melangeLanguages) {
+					if(lang.getAttribute("id").equals(selection)){
+						IConfigurationElement[] adapters = lang.getChildren("adapter");
+						for(IConfigurationElement adapter : adapters){
+							modelTypeNames.add(adapter.getAttribute("modeltypeId"));
+						}
+					}
+				}
+				_modelTypeCombo.setItems(modelTypeNames.toArray(empty));
+			}
+		});
+		createTextLabelLayout(parent, "");
+		
+		//ModelType
+		createTextLabelLayout(parent, "Available ModelType");
+		_modelTypeCombo = new Combo(parent, SWT.NONE);
+		_modelTypeCombo.setLayoutData(createStandardLayout());
+		
 
-		// button to deal with dynamic language creation and provisionning
-		// Button projectLocationButton = createPushButton(parent,
-		// "Dynamic Language Variants...", null);
-		// projectLocationButton.setEnabled(false);
-		// projectLocationButton.addSelectionListener(new SelectionAdapter() {
-		// public void widgetSelected(SelectionEvent evt) {
-		// // handleModelLocationButtonSelected();
-		// // TODO launch the appropriate selector
-		// MessageDialog.openWarning(PlatformUI.getWorkbench()
-		// .getActiveWorkbenchWindow().getShell(),
-		// "Dynamic Language Variants",
-		// "Action not implemented yet");
-		// updateLaunchConfigurationDialog();
-		// }
-		// });
 		return parent;
 	}
 
