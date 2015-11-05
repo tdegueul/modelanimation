@@ -406,9 +406,6 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 			}
 		});
 		
-		//Collect aspects
-		Set<Class> candidateAspects = getAllAspects(); 
-		
 		createTextLabelLayout(parent, "Main method");
 		_entryPointMethodText = new Text(parent, SWT.SINGLE | SWT.BORDER);
 		_entryPointMethodText.setLayoutData(createStandardLayout());
@@ -418,6 +415,7 @@ public class LaunchConfigurationMainTab extends LaunchConfigurationTab {
 		mainMethodBrowseButton.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				EObject modelElem = getModelElem();
+				Set<Class> candidateAspects = getAllAspects();
 				SelectMainMethodDialog dialog = new SelectMainMethodDialog(candidateAspects, modelElem, new ENamedElementQualifiedNameLabelProvider());
 				int res = dialog.open();
 				if (res == WizardDialog.OK) {
